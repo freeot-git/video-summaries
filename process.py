@@ -13,6 +13,7 @@ Writes to out/<video-id>/:
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import sysconfig
@@ -31,6 +32,16 @@ def add_winget_links():
     links = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links"
     if links.is_dir():
         os.environ["PATH"] = f"{os.environ['PATH']}{os.pathsep}{links}"
+
+
+def prefer_ipv4():
+    """Some networks reset Python's IPv6 connections to Hugging Face, so the model download fails."""
+    plain = socket.getaddrinfo
+
+    def ipv4_first(*args, **kwargs):
+        return sorted(plain(*args, **kwargs), key=lambda a: a[0] != socket.AF_INET)
+
+    socket.getaddrinfo = ipv4_first
 
 
 def add_gpu_dll_dirs():
@@ -75,10 +86,16 @@ def load_audio(video):
 
 
 def transcribe(video, out_dir):
-    add_gpu_dll_dirs()
+    import ctranslate2
     from faster_whisper import WhisperModel
 
-    model = WhisperModel(WHISPER_MODEL, device="cuda", compute_type="float16")
+    if ctranslate2.get_cuda_device_count() > 0:
+        add_gpu_dll_dirs()
+        device, compute_type = "cuda", "float16"
+    else:
+        print("  No CUDA device is visible; using CPU (slower).", flush=True)
+        device, compute_type = "cpu", "int8"
+    model = WhisperModel(WHISPER_MODEL, device=device, compute_type=compute_type)
     segments, info = model.transcribe(load_audio(video), vad_filter=True, beam_size=5)
     rows = [{"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments]
 
@@ -147,18 +164,31 @@ def main():
         sys.exit("Usage: uv run process.py <youtube-link>")
     url = sys.argv[1]
     add_winget_links()
+    prefer_ipv4()
     video_id = re.search(r"(?:v=|youtu\.be/)([\w-]{11})", url).group(1)
     out_dir = Path(__file__).parent / "out" / video_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
     video = download(url, out_dir)
-    print("Transcribing...", flush=True)
-    rows = transcribe(video, out_dir)
-    print(f"  {len(rows)} segments", flush=True)
     print("Grabbing frames...", flush=True)
     named = grab_frames(video, out_dir)
     build_sheets(named, out_dir)
     print(f"  {len(named)} frames; output in {out_dir}", flush=True)
+
+    print("Transcribing...", flush=True)
+    try:
+        rows = transcribe(video, out_dir)
+    except Exception as exc:
+        print(
+            f"Transcription failed ({type(exc).__name__}: {exc}). "
+            f"The video and frame sheets are still available in {out_dir}. "
+            "Check your internet connection for the first model download and "
+            "check the NVIDIA driver if CUDA should be available.",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+    print(f"  {len(rows)} segments; output in {out_dir}", flush=True)
 
 
 if __name__ == "__main__":
