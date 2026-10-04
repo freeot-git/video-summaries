@@ -2,7 +2,7 @@
 #
 #   irm https://raw.githubusercontent.com/freeot-git/video-summaries/main/install.ps1 | iex
 #
-# It installs ffmpeg and uv (with winget) if they're missing, downloads this project into
+# It installs ffmpeg, uv and Ollama (with winget) if they're missing, downloads this project into
 # %USERPROFILE%\video-summaries, and installs its Python packages. Running it again updates
 # the project and keeps anything already in its out folder.
 
@@ -45,6 +45,7 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
 Write-Host "1/3 Tools"
 Install-IfMissing "ffmpeg" "Gyan.FFmpeg"
 Install-IfMissing "uv" "astral-sh.uv"
+Install-IfMissing "ollama" "Ollama.Ollama"
 
 Write-Host "2/3 Downloading the project to $InstallDir"
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("video-summaries-" + [guid]::NewGuid())
@@ -73,4 +74,4 @@ Write-Host ""
 Write-Host "Done. To process a video:"
 Write-Host "  cd `"$InstallDir`""
 Write-Host "  uv run process.py `"https://www.youtube.com/watch?v=...`""
-Write-Host "The first run also downloads the speech model (about 1.6 GB)."
+Write-Host "The first run also downloads the speech model (about 1.6 GB) and the summary model (about 3.3 GB)."
