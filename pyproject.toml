@@ -1,0 +1,13 @@
+[project]
+name = "video-summaries"
+version = "0.1.0"
+description = "Turn a news video into a timestamped transcript and screen grabs, for story-by-story summaries."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "yt-dlp",
+    "faster-whisper",
+    "pillow",
+    # GPU libraries faster-whisper needs on Windows (CUDA 12, cuDNN 9).
+    "nvidia-cublas-cu12",
+    "nvidia-cudnn-cu12>=9,<10",
+]
