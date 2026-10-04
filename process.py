@@ -8,15 +8,22 @@ Writes to out/<video-id>/:
     transcript.json  the same, with start/end seconds
     frames/          a still each time the picture changes, named by its time
     sheets/          those stills tiled 4x3 with their times printed, for quick review
+    summary.md       each story's title, start and end times and a short summary
+    summary.txt      the same as plain text
+
+The summary is written on this computer by a local model run with Ollama.
 """
 
 import json
+import math
 import os
 import re
 import socket
 import subprocess
 import sys
 import sysconfig
+import time
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +32,19 @@ from PIL import Image, ImageDraw, ImageFont
 SCENE_THRESHOLD = 0.3  # how big a picture change counts as a new shot (0-1)
 SHEET_COLS, SHEET_ROWS, THUMB_W = 4, 3, 480
 WHISPER_MODEL = "large-v3-turbo"
+SUMMARY_MODEL = "qwen3.5:4b"
+OLLAMA_URL = "http://127.0.0.1:11434"
+
+SUMMARY_PROMPT = """You split a news video's transcript into its stories.
+
+The transcript comes from speech-to-text, one numbered line per segment. List every distinct
+story or segment in order: news stories, explainers, trivia, features. Leave out only the host's
+opening greeting and closing sign-off. For each story give:
+- title: a short headline in plain words
+- first_line, last_line: the numbers of its first and last transcript lines
+- summary: two or three sentences saying who, what, where and any key numbers
+
+Use only what the transcript says. Names may be misspelled by speech-to-text; copy them as written."""
 
 
 def add_winget_links():
@@ -42,6 +62,13 @@ def prefer_ipv4():
         return sorted(plain(*args, **kwargs), key=lambda a: a[0] != socket.AF_INET)
 
     socket.getaddrinfo = ipv4_first
+
+
+def add_ollama_dir():
+    """The Ollama installer adds itself to PATH, but only for windows opened after the install."""
+    ollama = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama"
+    if ollama.is_dir():
+        os.environ["PATH"] = f"{os.environ['PATH']}{os.pathsep}{ollama}"
 
 
 def add_gpu_dll_dirs():
@@ -159,11 +186,91 @@ def build_sheets(named, out_dir):
         sheet.save(sheets / f"sheet_{n // per + 1:02}_{first}-{last}.jpg", quality=85)
 
 
+def ollama(path, body=None, timeout=10):
+    data = json.dumps(body).encode() if body is not None else None
+    with urllib.request.urlopen(f"{OLLAMA_URL}{path}", data, timeout) as response:
+        return json.load(response)
+
+
+def start_ollama():
+    """Ollama normally runs in the background after install; start it if it isn't up."""
+    try:
+        ollama("/api/version")
+        return
+    except OSError:
+        pass
+    subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     creationflags=subprocess.CREATE_NO_WINDOW)
+    for _ in range(30):
+        time.sleep(1)
+        try:
+            ollama("/api/version")
+            return
+        except OSError:
+            pass
+    raise RuntimeError("Ollama didn't start. Open the Ollama app from the Start menu and try again.")
+
+
+def summarize(rows, out_dir):
+    start_ollama()
+    if SUMMARY_MODEL not in [m["name"] for m in ollama("/api/tags")["models"]]:
+        print(f"  Downloading the summary model ({SUMMARY_MODEL}, about 3.3 GB) the first time...", flush=True)
+        subprocess.run(["ollama", "pull", SUMMARY_MODEL], check=True)
+
+    numbered = "\n".join(f"{i}: {r['text']}" for i, r in enumerate(rows, start=1))
+    story = {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "first_line": {"type": "integer"},
+            "last_line": {"type": "integer"},
+            "summary": {"type": "string"},
+        },
+        "required": ["title", "first_line", "last_line", "summary"],
+    }
+    schema = {"type": "object", "properties": {"stories": {"type": "array", "items": story}}, "required": ["stories"]}
+    # Room for the transcript (about 3 characters a token) plus the answer, in 4K steps.
+    num_ctx = max(8192, math.ceil((len(numbered) / 3 + 4096) / 4096) * 4096)
+    reply = ollama("/api/chat", {
+        "model": SUMMARY_MODEL,
+        "messages": [
+            {"role": "system", "content": SUMMARY_PROMPT},
+            {"role": "user", "content": numbered},
+        ],
+        "format": schema,
+        "think": False,
+        "stream": False,
+        "options": {"temperature": 0, "num_ctx": num_ctx},
+    }, timeout=3600)
+    stories = json.loads(reply["message"]["content"])["stories"]
+
+    # Times come from the transcript itself, so they're exact even if the model's line numbers drift a little.
+    last = len(rows)
+    for s in stories:
+        s["first_line"] = min(max(s["first_line"], 1), last)
+        s["last_line"] = min(max(s["last_line"], s["first_line"]), last)
+        s["start"], s["end"] = rows[s["first_line"] - 1]["start"], rows[s["last_line"] - 1]["end"]
+    stories.sort(key=lambda s: s["start"])
+
+    info = json.loads((out_dir / "video.info.json").read_text(encoding="utf-8"))
+    title = info.get("title", out_dir.name)
+    md = [f"# {title}", "", info.get("webpage_url", ""), ""]
+    txt = [title, info.get("webpage_url", ""), ""]
+    for i, s in enumerate(stories, start=1):
+        span = f"{stamp(s['start'])} - {stamp(s['end'])}"
+        md += [f"## {i}. {s['title']}", "", f"**{span}**", "", s["summary"], ""]
+        txt += [f"{i}. {s['title']}", f"   {span}", f"   {s['summary']}", ""]
+    (out_dir / "summary.md").write_text("\n".join(md), encoding="utf-8")
+    (out_dir / "summary.txt").write_text("\n".join(txt), encoding="utf-8")
+    return stories
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit("Usage: uv run process.py <youtube-link>")
     url = sys.argv[1]
     add_winget_links()
+    add_ollama_dir()
     prefer_ipv4()
     video_id = re.search(r"(?:v=|youtu\.be/)([\w-]{11})", url).group(1)
     out_dir = Path(__file__).parent / "out" / video_id
@@ -189,6 +296,19 @@ def main():
         )
         sys.exit(1)
     print(f"  {len(rows)} segments; output in {out_dir}", flush=True)
+
+    print("Summarizing...", flush=True)
+    try:
+        stories = summarize(rows, out_dir)
+    except Exception as exc:
+        print(
+            f"Summary failed ({type(exc).__name__}: {exc}). "
+            f"The transcript and frame sheets are still available in {out_dir}.",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+    print(f"  {len(stories)} stories; see summary.txt in {out_dir}", flush=True)
 
 
 if __name__ == "__main__":
