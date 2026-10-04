@@ -24,7 +24,8 @@ This installs two free tools if you don't have them (**ffmpeg**, for video and s
 which sets up Python), then puts this project in a `video-summaries` folder in your user folder.
 Expect about 3 GB of downloads in total, including the speech model on the first run.
 
-It needs an NVIDIA graphics card. With one, a 10-minute video takes under a minute.
+An NVIDIA graphics card makes it fast: a 10-minute video takes under a minute. Without one it
+still works, using the computer's processor instead, but expect a few minutes for the same video.
 
 ## Use it
 
