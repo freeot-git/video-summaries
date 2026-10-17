@@ -1,0 +1,21 @@
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+# vCards keep the CRLF they were written with: the vCard standard requires it.
+*.vcf -text
+# Binary files. Without these lines git guesses from the first 8,000 bytes, and some
+# Illustrator and PDF files look like text to it, so it would rewrite their line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.ai binary
+*.eps binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.zip binary
