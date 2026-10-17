@@ -13,7 +13,7 @@ $ProgressPreference = "SilentlyContinue"  # Windows PowerShell downloads crawl w
 $Repo = "freeot-git/video-summaries"
 $InstallDir = if ($env:VIDEO_SUMMARIES_DIR) { $env:VIDEO_SUMMARIES_DIR } else { Join-Path $HOME "video-summaries" }
 
-function Refresh-Path {
+function Sync-Path {
     $links = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
     $env:Path = @(
         [Environment]::GetEnvironmentVariable("Path", "Machine"),
@@ -23,14 +23,14 @@ function Refresh-Path {
 }
 
 function Install-IfMissing($command, $wingetId) {
-    Refresh-Path
+    Sync-Path
     if (Get-Command $command -ErrorAction SilentlyContinue) {
         Write-Host "  $command is already installed."
         return
     }
     Write-Host "  Installing $command..."
     winget install --id $wingetId -e --silent --accept-source-agreements --accept-package-agreements
-    Refresh-Path
+    Sync-Path
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
         throw "$command didn't install. Try running: winget install --id $wingetId -e"
     }

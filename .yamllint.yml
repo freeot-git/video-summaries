@@ -1,0 +1,9 @@
+extends: default
+rules:
+  line-length:
+    max: 100
+  # A workflow's `on:` is a key, not a truthy value.
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
+  document-start: disable

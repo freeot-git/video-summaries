@@ -25,6 +25,7 @@ import sysconfig
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any, TypedDict
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -44,48 +45,61 @@ opening greeting and closing sign-off. For each story give:
 - first_line, last_line: the numbers of its first and last transcript lines
 - summary: two or three sentences saying who, what, where and any key numbers
 
-Use only what the transcript says. Names may be misspelled by speech-to-text; copy them as written."""
+Use only what the transcript says. Names may be misspelled by speech-to-text; copy them as
+written."""
 
 
-def add_winget_links():
+class Segment(TypedDict):
+    start: float
+    end: float
+    text: str
+
+
+def add_winget_links() -> None:
     """winget puts ffmpeg here; a window opened before the install won't have it on PATH yet."""
     links = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links"
     if links.is_dir():
         os.environ["PATH"] = f"{os.environ['PATH']}{os.pathsep}{links}"
 
 
-def prefer_ipv4():
-    """Some networks reset Python's IPv6 connections to Hugging Face, so the model download fails."""
+def prefer_ipv4() -> None:
+    """Some networks reset Python's IPv6 connections to Hugging Face.
+
+    The speech model download then fails, so IPv4 addresses are tried first.
+    """
     plain = socket.getaddrinfo
 
-    def ipv4_first(*args, **kwargs):
+    def ipv4_first(*args: Any, **kwargs: Any) -> list[Any]:
         return sorted(plain(*args, **kwargs), key=lambda a: a[0] != socket.AF_INET)
 
     socket.getaddrinfo = ipv4_first
 
 
-def add_ollama_dir():
+def add_ollama_dir() -> None:
     """The Ollama installer adds itself to PATH, but only for windows opened after the install."""
     ollama = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama"
     if ollama.is_dir():
         os.environ["PATH"] = f"{os.environ['PATH']}{os.pathsep}{ollama}"
 
 
-def add_gpu_dll_dirs():
-    """The nvidia-* wheels ship their DLLs inside site-packages; Windows won't find them otherwise."""
+def add_gpu_dll_dirs() -> None:
+    """The nvidia-* wheels ship their DLLs inside site-packages.
+
+    Windows won't find them there unless their folders are added.
+    """
     nvidia = Path(sysconfig.get_paths()["purelib"]) / "nvidia"
     for bin_dir in nvidia.glob("*/bin"):
         os.add_dll_directory(str(bin_dir))
         os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
 
 
-def stamp(seconds):
+def stamp(seconds: float) -> str:
     m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)
     return f"{h}:{m:02}:{s:02}" if h else f"{m}:{s:02}"
 
 
-def download(url, out_dir):
+def download(url: str, out_dir: Path) -> Path:
     video = out_dir / "video.mp4"
     if not video.exists():
         subprocess.run(
@@ -107,7 +121,7 @@ def download(url, out_dir):
     return video
 
 
-def load_audio(video):
+def load_audio(video: Path) -> np.ndarray[Any, np.dtype[np.float32]]:
     """16 kHz mono samples via ffmpeg. faster-whisper's own reader (PyAV) breaks across versions."""
     raw = subprocess.run(
         [
@@ -131,7 +145,7 @@ def load_audio(video):
     return np.frombuffer(raw, dtype=np.float32)
 
 
-def transcribe(video, out_dir):
+def transcribe(video: Path, out_dir: Path) -> list[Segment]:
     import ctranslate2
     from faster_whisper import WhisperModel
 
@@ -143,7 +157,9 @@ def transcribe(video, out_dir):
         device, compute_type = "cpu", "int8"
     model = WhisperModel(WHISPER_MODEL, device=device, compute_type=compute_type)
     segments, info = model.transcribe(load_audio(video), vad_filter=True, beam_size=5)
-    rows = [{"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments]
+    rows: list[Segment] = [
+        {"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments
+    ]
 
     (out_dir / "transcript.json").write_text(
         json.dumps(
@@ -156,7 +172,7 @@ def transcribe(video, out_dir):
     return rows
 
 
-def grab_frames(video, out_dir):
+def grab_frames(video: Path, out_dir: Path) -> list[tuple[float, Path]]:
     frames = out_dir / "frames"
     frames.mkdir(exist_ok=True)
     for old in frames.glob("*.jpg"):
@@ -193,7 +209,7 @@ def grab_frames(video, out_dir):
     return named
 
 
-def build_sheets(named, out_dir):
+def build_sheets(named: list[tuple[float, Path]], out_dir: Path) -> None:
     sheets = out_dir / "sheets"
     sheets.mkdir(exist_ok=True)
     for old in sheets.glob("*.jpg"):
@@ -202,11 +218,11 @@ def build_sheets(named, out_dir):
     per = SHEET_COLS * SHEET_ROWS
     for n in range(0, len(named), per):
         batch = named[n : n + per]
-        thumbs = []
+        thumbs: list[tuple[float, Image.Image]] = []
         for t, path in batch:
-            im = Image.open(path)
-            im = im.resize((THUMB_W, round(im.height * THUMB_W / im.width)))
-            thumbs.append((t, im))
+            with Image.open(path) as frame:
+                thumb = frame.resize((THUMB_W, round(frame.height * THUMB_W / frame.width)))
+            thumbs.append((t, thumb))
         th = thumbs[0][1].height
         sheet = Image.new("RGB", (SHEET_COLS * THUMB_W, SHEET_ROWS * th), "black")
         draw = ImageDraw.Draw(sheet)
@@ -219,19 +235,20 @@ def build_sheets(named, out_dir):
         sheet.save(sheets / f"sheet_{n // per + 1:02}_{first}-{last}.jpg", quality=85)
 
 
-def ollama(path, body=None, timeout=10):
+def ollama(path: str, body: dict[str, Any] | None = None, timeout: float = 10) -> Any:
     data = json.dumps(body).encode() if body is not None else None
-    with urllib.request.urlopen(f"{OLLAMA_URL}{path}", data, timeout) as response:
+    with urllib.request.urlopen(f"{OLLAMA_URL}{path}", data, timeout) as response:  # noqa: S310 -- fixed local address
         return json.load(response)
 
 
-def start_ollama():
+def start_ollama() -> None:
     """Ollama normally runs in the background after install; start it if it isn't up."""
     try:
         ollama("/api/version")
-        return
     except OSError:
         pass
+    else:
+        return
     subprocess.Popen(
         ["ollama", "serve"],
         stdout=subprocess.DEVNULL,
@@ -242,15 +259,15 @@ def start_ollama():
         time.sleep(1)
         try:
             ollama("/api/version")
-            return
         except OSError:
             pass
-    raise RuntimeError(
-        "Ollama didn't start. Open the Ollama app from the Start menu and try again."
-    )
+        else:
+            return
+    msg = "Ollama didn't start. Open the Ollama app from the Start menu and try again."
+    raise RuntimeError(msg)
 
 
-def summarize(rows, out_dir):
+def summarize(rows: list[Segment], out_dir: Path) -> list[dict[str, Any]]:
     start_ollama()
     if SUMMARY_MODEL not in [m["name"] for m in ollama("/api/tags")["models"]]:
         print(
@@ -292,9 +309,10 @@ def summarize(rows, out_dir):
         },
         timeout=3600,
     )
-    stories = json.loads(reply["message"]["content"])["stories"]
+    stories: list[dict[str, Any]] = json.loads(reply["message"]["content"])["stories"]
 
-    # Times come from the transcript itself, so they're exact even if the model's line numbers drift a little.
+    # Times come from the transcript itself, so they're exact even if the model's line numbers
+    # drift a little.
     last = len(rows)
     for s in stories:
         s["first_line"] = min(max(s["first_line"], 1), last)
@@ -315,14 +333,17 @@ def summarize(rows, out_dir):
     return stories
 
 
-def main():
+def main() -> None:
     if len(sys.argv) != 2:
         sys.exit("Usage: uv run process.py <youtube-link>")
     url = sys.argv[1]
     add_winget_links()
     add_ollama_dir()
     prefer_ipv4()
-    video_id = re.search(r"(?:v=|youtu\.be/)([\w-]{11})", url).group(1)
+    match = re.search(r"(?:v=|youtu\.be/)([\w-]{11})", url)
+    if not match:
+        sys.exit(f"That doesn't look like a YouTube link: {url}")
+    video_id = match.group(1)
     out_dir = Path(__file__).parent / "out" / video_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -335,7 +356,7 @@ def main():
     print("Transcribing...", flush=True)
     try:
         rows = transcribe(video, out_dir)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- any failure is told to the user in plain words
         print(
             f"Transcription failed ({type(exc).__name__}: {exc}). "
             f"The video and frame sheets are still available in {out_dir}. "
@@ -350,7 +371,7 @@ def main():
     print("Summarizing...", flush=True)
     try:
         stories = summarize(rows, out_dir)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 -- any failure is told to the user in plain words
         print(
             f"Summary failed ({type(exc).__name__}: {exc}). "
             f"The transcript and frame sheets are still available in {out_dir}.",

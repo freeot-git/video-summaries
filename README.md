@@ -39,7 +39,7 @@ uv run process.py "https://www.youtube.com/watch?v=..."
 Everything for that video lands in `out\<video id>\`:
 
 | File | What it is |
-|---|---|
+| --- | --- |
 | `summary.txt` | Each story's title, start and end times, and a short summary |
 | `summary.md` | The same, formatted for viewers that show Markdown |
 | `transcript.txt` | What was said, one line per sentence or two, with start and end times |

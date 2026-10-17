@@ -4,10 +4,83 @@ version = "0.1.0"
 description = "Turn a news video into a timestamped transcript and screen grabs, for story-by-story summaries."
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "yt-dlp",
-    "faster-whisper",
-    "pillow",
-    # GPU libraries faster-whisper needs on Windows (CUDA 12, cuDNN 9).
-    "nvidia-cublas-cu12",
-    "nvidia-cudnn-cu12>=9,<10",
+  "yt-dlp",
+  "faster-whisper",
+  "numpy",
+  "pillow",
+  # GPU libraries faster-whisper needs on Windows (CUDA 12, cuDNN 9).
+  "nvidia-cublas-cu12",
+  "nvidia-cudnn-cu12>=9,<10",
 ]
+
+[dependency-groups]
+# What mypy needs to check process.py, without the speech model or the CUDA wheels.
+typecheck = [
+  "mypy==2.4.0",
+  "numpy",
+  "pillow",
+]
+
+[tool.ruff]
+line-length = 100
+indent-width = 4
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+skip-magic-trailing-comma = false
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "W",
+  "F",
+  "I",
+  "UP",
+  "B",
+  "C4",
+  "SIM",
+  "RET",
+  "ARG",
+  "PTH",
+  "RUF",
+  "T20",
+  "BLE",
+  "TRY",
+  "G",
+  "S",
+  "PT",
+  "SLF001",
+  "PIE",
+  "PERF",
+  "FURB",
+  "DTZ",
+  "A",
+  "ERA",
+  "N",
+  "T10",
+  "PGH003",
+  "PGH004",
+]
+ignore = [
+  # assert: tests and guards use it.
+  "S101",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# A command-line tool: printing is its output. It runs ffmpeg, ollama and yt-dlp by name from
+# PATH, with arguments it builds itself.
+"process.py" = ["T20", "S603", "S607"]
+
+[tool.mypy]
+strict = true
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+python_version = "3.12"
+
+[[tool.mypy.overrides]]
+# Imported only to transcribe; installing them to check types would pull in the CUDA wheels.
+module = ["ctranslate2", "faster_whisper"]
+ignore_missing_imports = true
