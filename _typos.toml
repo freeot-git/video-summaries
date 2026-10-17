@@ -1,0 +1,11 @@
+[default]
+locale = "en-us"
+# yt-dlp format selectors, such as "bv*[height<=720]+ba": "ba" is best audio.
+extend-ignore-re = ['bv\*\[[^"]*']
+
+[default.extend-identifiers]
+# FreeOT's own name, which typos splits into "Free" and "OT".
+FreeOT = "FreeOT"
+
+[files]
+extend-exclude = ["uv.lock"]

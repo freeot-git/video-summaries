@@ -1,0 +1,11 @@
+extends: default
+rules:
+  line-length:
+    max: 100
+    # A long value with no spaces, such as a hook's regex, can't be wrapped.
+    allow-non-breakable-inline-mappings: true
+  # A workflow's `on:` is a key, not a truthy value.
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
+  document-start: disable

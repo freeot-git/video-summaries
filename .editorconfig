@@ -1,0 +1,24 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{js,mjs,cjs,ts,css,json,jsonc,webmanifest,html,svg,yml,yaml,md,toml}]
+indent_size = 2
+
+# Windows PowerShell 5.1 misreads UTF-8 without a byte-order mark.
+[*.ps1]
+charset = utf-8-bom
+
+# Run with `irm | iex`, which fails on a leading byte-order mark, so it stays plain ASCII without one.
+[install.ps1]
+charset = utf-8
+
+# cmd.exe and the vCard standard both need CRLF.
+[*.{cmd,bat,vcf}]
+end_of_line = crlf

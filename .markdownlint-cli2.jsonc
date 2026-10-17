@@ -1,0 +1,10 @@
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD034": false,
+    "MD024": { "siblings_only": true },
+    "MD049": { "style": "asterisk" },
+    "MD060": { "style": "compact" }
+  }
+}
