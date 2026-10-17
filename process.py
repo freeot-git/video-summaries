@@ -90,11 +90,16 @@ def download(url, out_dir):
     if not video.exists():
         subprocess.run(
             [
-                sys.executable, "-m", "yt_dlp",
-                "-f", "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720]",
-                "--merge-output-format", "mp4",
+                sys.executable,
+                "-m",
+                "yt_dlp",
+                "-f",
+                "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720]",
+                "--merge-output-format",
+                "mp4",
                 "--write-info-json",
-                "-o", str(out_dir / "video.%(ext)s"),
+                "-o",
+                str(out_dir / "video.%(ext)s"),
                 url,
             ],
             check=True,
@@ -105,9 +110,23 @@ def download(url, out_dir):
 def load_audio(video):
     """16 kHz mono samples via ffmpeg. faster-whisper's own reader (PyAV) breaks across versions."""
     raw = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(video),
-         "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],
-        capture_output=True, check=True,
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(video),
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-f",
+            "f32le",
+            "-",
+        ],
+        capture_output=True,
+        check=True,
     ).stdout
     return np.frombuffer(raw, dtype=np.float32)
 
@@ -127,7 +146,9 @@ def transcribe(video, out_dir):
     rows = [{"start": s.start, "end": s.end, "text": s.text.strip()} for s in segments]
 
     (out_dir / "transcript.json").write_text(
-        json.dumps({"language": info.language, "duration": info.duration, "segments": rows}, indent=2),
+        json.dumps(
+            {"language": info.language, "duration": info.duration, "segments": rows}, indent=2
+        ),
         encoding="utf-8",
     )
     lines = [f"[{stamp(r['start'])} - {stamp(r['end'])}] {r['text']}" for r in rows]
@@ -143,12 +164,24 @@ def grab_frames(video, out_dir):
     # Always keep the first frame, then one per shot change. showinfo logs each kept frame's time.
     result = subprocess.run(
         [
-            "ffmpeg", "-hide_banner", "-y", "-i", str(video),
-            "-vf", f"select='eq(n,0)+gt(scene,{SCENE_THRESHOLD})',showinfo",
-            "-fps_mode", "vfr", "-q:v", "3",
+            "ffmpeg",
+            "-hide_banner",
+            "-y",
+            "-i",
+            str(video),
+            "-vf",
+            f"select='eq(n,0)+gt(scene,{SCENE_THRESHOLD})',showinfo",
+            "-fps_mode",
+            "vfr",
+            "-q:v",
+            "3",
             str(frames / "tmp_%05d.jpg"),
         ],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
     )
     times = [float(t) for t in re.findall(r"pts_time:([\d.]+)", result.stderr)]
     named = []
@@ -168,7 +201,7 @@ def build_sheets(named, out_dir):
     font = ImageFont.truetype("arial.ttf", 22)
     per = SHEET_COLS * SHEET_ROWS
     for n in range(0, len(named), per):
-        batch = named[n:n + per]
+        batch = named[n : n + per]
         thumbs = []
         for t, path in batch:
             im = Image.open(path)
@@ -199,8 +232,12 @@ def start_ollama():
         return
     except OSError:
         pass
-    subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     creationflags=subprocess.CREATE_NO_WINDOW)
+    subprocess.Popen(
+        ["ollama", "serve"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
     for _ in range(30):
         time.sleep(1)
         try:
@@ -208,13 +245,18 @@ def start_ollama():
             return
         except OSError:
             pass
-    raise RuntimeError("Ollama didn't start. Open the Ollama app from the Start menu and try again.")
+    raise RuntimeError(
+        "Ollama didn't start. Open the Ollama app from the Start menu and try again."
+    )
 
 
 def summarize(rows, out_dir):
     start_ollama()
     if SUMMARY_MODEL not in [m["name"] for m in ollama("/api/tags")["models"]]:
-        print(f"  Downloading the summary model ({SUMMARY_MODEL}, about 3.3 GB) the first time...", flush=True)
+        print(
+            f"  Downloading the summary model ({SUMMARY_MODEL}, about 3.3 GB) the first time...",
+            flush=True,
+        )
         subprocess.run(["ollama", "pull", SUMMARY_MODEL], check=True)
 
     numbered = "\n".join(f"{i}: {r['text']}" for i, r in enumerate(rows, start=1))
@@ -228,20 +270,28 @@ def summarize(rows, out_dir):
         },
         "required": ["title", "first_line", "last_line", "summary"],
     }
-    schema = {"type": "object", "properties": {"stories": {"type": "array", "items": story}}, "required": ["stories"]}
+    schema = {
+        "type": "object",
+        "properties": {"stories": {"type": "array", "items": story}},
+        "required": ["stories"],
+    }
     # Room for the transcript (about 3 characters a token) plus the answer, in 4K steps.
     num_ctx = max(8192, math.ceil((len(numbered) / 3 + 4096) / 4096) * 4096)
-    reply = ollama("/api/chat", {
-        "model": SUMMARY_MODEL,
-        "messages": [
-            {"role": "system", "content": SUMMARY_PROMPT},
-            {"role": "user", "content": numbered},
-        ],
-        "format": schema,
-        "think": False,
-        "stream": False,
-        "options": {"temperature": 0, "num_ctx": num_ctx},
-    }, timeout=3600)
+    reply = ollama(
+        "/api/chat",
+        {
+            "model": SUMMARY_MODEL,
+            "messages": [
+                {"role": "system", "content": SUMMARY_PROMPT},
+                {"role": "user", "content": numbered},
+            ],
+            "format": schema,
+            "think": False,
+            "stream": False,
+            "options": {"temperature": 0, "num_ctx": num_ctx},
+        },
+        timeout=3600,
+    )
     stories = json.loads(reply["message"]["content"])["stories"]
 
     # Times come from the transcript itself, so they're exact even if the model's line numbers drift a little.
