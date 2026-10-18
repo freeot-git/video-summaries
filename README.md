@@ -1,5 +1,7 @@
 # Video summaries
 
+By [Freedom of Technology, LLC](https://freedomoftechnology.com)
+
 Turns a YouTube video into a story-by-story summary, without relying on YouTube's own captions
 or any online AI service. Everything runs on your own computer:
 
@@ -11,7 +13,7 @@ or any online AI service. Everything runs on your own computer:
 The summary is written by a small AI model running on your computer, so check names and details
 against the transcript and screen grabs before you rely on them.
 
-This is an early test. It isn't an official FreeOT product.
+Not a supported FreeOT product.
 
 ## Set it up (Windows 10 or 11)
 
