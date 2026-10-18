@@ -76,3 +76,5 @@ repos:
     rev: v1.50.3
     hooks:
       - id: typos
+        # Reports only: a spelling fix nobody sees can break a code or a word.
+        args: [--force-exclude]
