@@ -1,10 +1,14 @@
 {
   "config": {
     "default": true,
+    // Line length: prose wraps in the editor.
     "MD013": false,
+    // Bare web addresses: GitHub links them anyway.
     "MD034": false,
+    // An update log can repeat "Changed".
     "MD024": { "siblings_only": true },
     "MD049": { "style": "asterisk" },
+    // Tables: one space each side, nothing lined up.
     "MD060": { "style": "compact" }
   }
 }
