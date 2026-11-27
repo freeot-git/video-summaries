@@ -60,11 +60,15 @@ repos:
     hooks:
       - id: yamllint
 
-  - repo: https://github.com/Mateusz-Grzelinski/actionlint-py
-    rev: v1.7.12.25
+  - repo: local
     hooks:
-      - id: actionlint
-        additional_dependencies: [shellcheck-py==0.11.0.1]
+      - id: jactionlint
+        name: jactionlint
+        language: python
+        additional_dependencies: [jactionlint==2.6.0, shellcheck-py==0.11.0.1]
+        entry: jactionlint --profile correctness --no-online
+        pass_filenames: false
+        files: ^(\.github/workflows/|\.github/dependabot\.ya?ml$|(.*/)?action\.ya?ml$|\.github/jactionlint\.ya?ml$|\.pre-commit-config\.yaml$)
 
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
     rev: v1.30.1
